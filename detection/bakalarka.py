@@ -15,13 +15,9 @@ from scipy.linalg import eigh
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
-# knn
 from sklearn.neighbors import KNeighborsClassifier
-# svc
 from sklearn.svm import SVC
-# random forest
 from sklearn.ensemble import RandomForestClassifier
-# gradient boosting
 from sklearn.ensemble import GradientBoostingClassifier
 
 
@@ -72,7 +68,7 @@ def read_hdf5(filename, signal="icp"):
     return data, sample_rate, start_time_s, end_time_s
 
 def butterworth_filter_icp(x, sr):
-    # filter do 10 Hz
+    # filter 10 Hz
 
     b, a = signal.butter(4, 10 / (sr / 2), 'low')
     y = signal.filtfilt(b, a, x)
@@ -80,7 +76,7 @@ def butterworth_filter_icp(x, sr):
     return y
 
 def butterworth_filter_abp(x, sr):
-    # filter to 20 Hz
+    # filter 20 Hz
 
     b, a = signal.butter(4, 20 / (sr / 2), 'low')
     y = signal.filtfilt(b, a, x)
@@ -111,6 +107,9 @@ def upsample_signal(X, sr, target_sr):
     return X_upsampled
 
 def max_consecutive_nans(X):
+    """
+    Return maximum number of consecutive NaNs in signal.
+    """
     max_consecutive = 0
     consecutive = 0
     for i in range(len(X)):
@@ -124,6 +123,9 @@ def max_consecutive_nans(X):
 
 
 def interpolate_nans(X, n=100):
+    """
+    Interpolate NaNs in signal.
+    """
     x = X
     # mirror signal
     x = np.concatenate([x[::-1], x, x[::-1]])
@@ -135,6 +137,7 @@ def interpolate_nans(X, n=100):
     return x.values
 
 
+# read selected HDF5 file
 icp_data, icp_sr, icp_start_time_s, icp_end_time_s = read_hdf5(HDF5_FILE, signal="icp")
 abp_data, abp_sr, abp_start_time_s, abp_end_time_s = read_hdf5(HDF5_FILE, signal=ABP_KEY)
 
@@ -147,17 +150,20 @@ abp_length_h = abp_length_s / 3600
 print(f"ICP length: {icp_length_s} s ({icp_length_h} h)")
 print(f"ABP length: {abp_length_s} s ({abp_length_h} h)")
 
+# read artefacts
 global_artefacts, icp_artefacts, abp_artefacts, metadata = read_artf(ARTF_FILE, abp_name=ABP_KEY)
 icp_artefacts = sorted(icp_artefacts + global_artefacts, key=lambda x: x.start_time.timestamp())
 abp_artefacts = sorted(abp_artefacts + global_artefacts, key=lambda x: x.start_time.timestamp())
 
-# get normal segments
+# get selected normal segments
 #x_icp_normal = icp_data[(217) * (int(icp_sr) * WINDOW_SIZE_SEC):(218) * (int(icp_sr) * WINDOW_SIZE_SEC)]
 x_icp_normal = icp_data[(1) * (int(icp_sr) * WINDOW_SIZE_SEC):(2) * (int(icp_sr) * WINDOW_SIZE_SEC)]
 x_abp_normal = abp_data[1 * (int(abp_sr) * WINDOW_SIZE_SEC):2 * (int(abp_sr) * WINDOW_SIZE_SEC)]
 
+# get nans for red highlight in plot
 x_icp_normal_nans_idx = np.isnan(x_icp_normal)
 
+# filter signal
 x_abp_normal_filtered = butterworth_filter_abp(x_abp_normal, abp_sr)
 x_icp_normal_filtered = butterworth_filter_icp(x_icp_normal, icp_sr)
 
@@ -289,6 +295,7 @@ plt.show()
 
 ###### ARTEFACTS
 
+# get artefact start indexes
 abp_artefact_start_idxs = []
 for artefact in abp_artefacts:
     artefact_idx_start, artefact_idx_end = artefact.to_index(abp_sr, WINDOW_SIZE_SEC, abp_start_time_s)
@@ -299,6 +306,7 @@ for artefact in icp_artefacts:
     artefact_idx_start, artefact_idx_end = artefact.to_index(icp_sr, WINDOW_SIZE_SEC, icp_start_time_s)
     icp_artefact_start_idxs.append(artefact_idx_start)
 
+# explore artefacts
 #for i, art in enumerate(abp_artefacts):
 #    artefact_idx = art.to_index(abp_sr, WINDOW_SIZE_SEC, abp_start_time_s)
 #    print(f"Artefakt {i}: {artefact_idx}")
@@ -307,12 +315,14 @@ for artefact in icp_artefacts:
 #    plt.title(f"Artefakt {i}")
 #    plt.show()
 
+# get selected artefacts
 icp_artefact_idx = icp_artefacts[1].to_index(icp_sr, WINDOW_SIZE_SEC, icp_start_time_s)
 abp_artefact_idx = abp_artefacts[1].to_index(abp_sr, WINDOW_SIZE_SEC, abp_start_time_s)
 print("ICP artefact index:", icp_artefact_idx, "ABP artefact index:", abp_artefact_idx)
 x_icp_artefact = icp_data[icp_artefact_idx[0]:icp_artefact_idx[1]]
 x_abp_artefact = abp_data[abp_artefact_idx[0]:abp_artefact_idx[1]]
 
+# filter artefacts
 x_icp_artefact_filtered = butterworth_filter_icp(x_icp_artefact, icp_sr)
 x_abp_artefact_filtered = butterworth_filter_abp(x_abp_artefact, abp_sr)
 
@@ -410,6 +420,7 @@ plt.show()
 upsample_factor = 100
 
 
+# upsample signal to 10000 Hz
 x_abp_normal_upsampled = upsample_signal(x_abp_normal, abp_sr, abp_sr * upsample_factor)
 x_abp_normal_upsampled_sr = int(abp_sr * upsample_factor)
 
@@ -555,7 +566,6 @@ print(features.shape)
 plt.imshow(features, aspect='auto', origin='lower',
            extent=[0, features.shape[1], 0, features.shape[0]],
            vmin=0, vmax=1)
-#plt.ylim(0, 20)
 plt.xlabel("Čas [s]")
 plt.ylabel("Vlastnost")
 xticks = np.arange(0, features.shape[1], 200)
@@ -579,7 +589,6 @@ print(features.shape)
 plt.imshow(features, aspect='auto', origin='lower',
                 extent=[0, features.shape[1], 0, features.shape[0]],
                 vmin=0, vmax=1)
-#plt.ylim(0, 10)
 plt.xlabel("Čas [s]")
 plt.ylabel("Vlastnost")
 xticks = np.arange(0, features.shape[1], 200)
@@ -602,7 +611,6 @@ features = features.T
 plt.imshow(features, aspect='auto', origin='lower',
                 extent=[0, features.shape[1], 0, features.shape[0]],
                 vmin=0, vmax=1)
-#plt.ylim(0, 20)
 plt.xlabel("Čas [s]")
 plt.ylabel("Vlastnost")
 xticks = np.arange(0, features.shape[1], 200)
@@ -625,7 +633,6 @@ features = features.T
 plt.imshow(features, aspect='auto', origin='lower',
                 extent=[0, features.shape[1], 0, features.shape[0]],
                 vmin=0, vmax=1)
-#plt.ylim(0, 10)
 plt.xlabel("Čas [s]")
 plt.ylabel("Vlastnost")
 xticks = np.arange(0, features.shape[1], 200)
@@ -642,6 +649,9 @@ plt.show()
 ##### detection
 
 def process_segment(X, sr, is_icp: bool):
+    """
+    Process and transform segment for classification.
+    """
 
     consecutive_nans = max_consecutive_nans(X)
     if consecutive_nans > 50:
@@ -649,10 +659,8 @@ def process_segment(X, sr, is_icp: bool):
 
     if np.sum(np.isnan(X)) > 0:
         X = interpolate_nans(X)
-        #assert np.sum(np.isnan(X)) == 0, "NaNs in segment"
         if np.sum(np.isnan(X)) > 0:
             raise ValueError("NaNs in segment")
-        #raise ValueError("NaNs in segment")
 
     # filter
     X_filtered = butterworth_filter_icp(X, sr) if is_icp else butterworth_filter_abp(X, sr)
@@ -674,6 +682,9 @@ def process_segment(X, sr, is_icp: bool):
     return slow_features
 
 def extract_features(slow_features):
+    """
+    Extract features from slow features for classification.
+    """
     slow_features = slow_features.T
 
     # split into windows
@@ -695,6 +706,9 @@ def extract_features(slow_features):
 
 
 def get_hdf5_file_segments(hdf5_file, artf_file, window_size_sec=10):
+    """
+    Get segments from HDF5 file.
+    """
     icp_data, icp_sr, icp_start_time_s, icp_end_time_s = read_hdf5(hdf5_file, signal="icp")
     abp_data, abp_sr, abp_start_time_s, abp_end_time_s = read_hdf5(hdf5_file, signal=ABP_KEY)
 
@@ -772,7 +786,7 @@ for root, dirs, files in os.walk("data/2024-03-04"):
 #hdf5_files = hdf5_files[:1]
 #hdf5_files = ['data/2024-03-04/TBI_003.hdf5']
 # remove TBI_003
-hdf5_files = [file for file in hdf5_files if "TBI_003" not in file]
+#hdf5_files = [file for file in hdf5_files if "TBI_003" not in file]
 
 # get all artf files in data/2024-03-04
 artf_files = []
@@ -818,9 +832,7 @@ print("Artefacts", np.sum(y))
 X = []
 # extract features
 for slow_features in X_slow.copy():
-    #X.append(extract_features(slow_features))
     features = extract_features(slow_features)
-    #features = slow_features.flatten()
     X.append(features)
 
 X = np.array(X)
@@ -837,7 +849,6 @@ print(X_test.shape, y_test.shape)
 clf = RandomForestClassifier(n_estimators=200)
 #clf = GradientBoostingClassifier(n_estimators=200)
 clf.fit(X_train, y_train)
-#print(clf.score(X_test, y_test))
 print(classification_report(y_test, clf.predict(X_test)))
 print(confusion_matrix(y_test, clf.predict(X_test)))
 tn, fp, fn, tp = confusion_matrix(y_test, clf.predict(X_test)).ravel()
@@ -857,6 +868,7 @@ for idx in fn_idxs[0]:
     plt.title("False negative")
     plt.show()
 
+# plot transformation for selected false positive and false negative
 fp_idx = np.where((y_test == 0) & (clf.predict(X_test) == 1))[0]
 fn_idx = np.where((y_test == 1) & (clf.predict(X_test) == 0))[0]
 
